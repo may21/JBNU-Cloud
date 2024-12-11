@@ -1,296 +1,264 @@
 #!/bin/bash
 
-#초기화된 변수 모음
+# Test mode: Display commands to create accounts
+#./CSV_User_Creater.sh users.csv Count=1 Name=2 Password=3 Project=4 Email=5
+
+# Execution mode: Create accounts
+#./CSV_User_Creater.sh users.csv Count=1 Name=2 Password=3 Project=4 Work=
+
+# Delete accounts
+#./CSV_User_Creater.sh users.csv Count=1 Name=2 Password=3 Project=4 Delete=
+
+# This script is designed to create multiple accounts in OpenStack from a CSV file.
+# It processes command-line options to determine how to read the CSV file and execute
+# OpenStack commands accordingly.
+
+# Initialize variables
 count_ok=0
 name_ok=0
 password_ok=0
 project_ok=0
 email_ok=0
 description_ok=0
+
 count_p=0
 name_p=0
 password_p=0
 project_p=0
 email_p=0
 description_p=0
-da='$'
-name_s=""
-tests=0
-deletes=0
 
-#도움말 -h입력을 받으면 출력
+name_prefix=""
+execute_commands=0
+delete_accounts=0
+
+# Display help message if 'h-' is provided as the first argument
 if [ "$1" == "h-" ]; then
-	echo "--------------------------------------------[설명]----------------------------------------------"
-	echo "이 프로그램은 OpenStack에서 다수의 계정을 생성할 수 있도록 제작된 프로그램입니다."
-	echo ""
-	echo "---------------------------------------[명령어 사용법]------------------------------------------"
-	echo "CSV_User_Creater.sh [csv파일 이름] [옵션]..."
-	echo ""
-	echo "------------------------------------[옵션 종류 밑 사용법]---------------------------------------"
-	echo " Help=               : 프로그램 설명 및 사용법 설명"
-	echo " Count=[숫자]        : csv파일에서 [숫자]번째 필드를 카운트로 설정 (1에서 n까지 정렬된 필드) {필수 옵션}"
-	echo " Name=[숫자]         : csv파일에서 [숫자]번째 필드를 계정 이름으로 설정                      {필수 옵션}"
-	echo " Password=[숫자]     : csv파일에서 [숫자]번째 필드를 계정 암호로 설정                        {필수 옵션}"
-	echo " Project=[숫자]      : csv파일에서 [숫자]번째 필드를 계정 프로젝트 이름으로 설정             {필수 옵션}"
-	echo " Email=[숫자]        : csv파일에서 [숫자]번째 필드를 E-Mail로 설정                           {선택 옵션}"
-	echo " ProjectStr=[문자열] : [문자열]을 계정 프로젝트 이름으로 설정                                {필수 옵션}"
-	echo " NameAdd=[문자열]    : [문자얼]을 계정이름 앞에 추가                                         {필수 옵션}"
-	echo " Work=               : 기본인 테스트상태를 해제하고 작업을 실행                              {선택 옵션}"
-	echo " Delete=             : 다음 계정들을 삭제                                                    {선택 옵션}"
-	echo ""
-	echo "------------------------------------------------------------------------------------------------"
-	exit 0
+    echo "--------------------------------------------[Description]----------------------------------------------"
+    echo "This program is designed to create multiple accounts in OpenStack from a CSV file."
+    echo ""
+    echo "---------------------------------------[Usage]------------------------------------------"
+    echo "$0 [CSV file name] [options]..."
+    echo ""
+    echo "------------------------------------[Options and Usage]---------------------------------------"
+    echo " Help=               : Displays program description and usage instructions"
+    echo " Count=[number]      : Sets the [number]-th field in the CSV file as the count (fields ordered from 1 to n) {Required}"
+    echo " Name=[number]       : Sets the [number]-th field in the CSV file as the account name                      {Required}"
+    echo " Password=[number]   : Sets the [number]-th field in the CSV file as the account password                  {Required}"
+    echo " Project=[number]    : Sets the [number]-th field in the CSV file as the account project name              {Optional}"
+    echo " ProjectStr=[string] : Sets [string] as the account project name                                           {Optional}"
+    echo " Email=[number]      : Sets the [number]-th field in the CSV file as the email                             {Optional}"
+    echo " Description=[number]: Sets the [number]-th field in the CSV file as the description                       {Optional}"
+    echo " NameAdd=[string]    : Adds [string] in front of the account name                                          {Optional}"
+    echo " Work=               : Executes the commands instead of displaying them                                    {Optional}"
+    echo " Delete=             : Deletes the specified accounts instead of creating them                             {Optional}"
+    echo ""
+    echo "------------------------------------------------------------------------------------------------"
+    exit 0
 fi
 
-#받은 명령어 종류를 분별하여 필드번호 할당
-SetOption()
-{
-	opt=$(awk -F= '{print $1}' <<< $SO)
-	if [ "$opt" == "Name" ]; then #이름 위치
-		name_p=$(awk -F= '{print $2}' <<< $SO)
-		if [ "$name_p" == "" ]; then
-			name_p=0
-		fi
-		name_ok=$((name_ok+1))
-	elif [ "$opt" == "Password" ]; then #암호 위치
-		password_p=$(awk -F= '{print $2}' <<< $SO)
-		if [ "$password_p" == "" ]; then
-			password_p=0
-		fi
-		password_ok=$((password_ok+1))
-	elif [ "$opt" == "Count" ]; then #카운트 위치
-		count_p=$(awk -F= '{print $2}' <<< $SO)
-		if [ "$count_p" == "" ]; then
-			count_p=0
-		fi
-		count_ok=$((count_ok+1))
-	elif [ "$opt" == "Project" ]; then #프로젝트 위치
-		project_p=$(awk -F= '{print $2}' <<< $SO)
-		if [ "$project_p" == "" ]; then
-			project_p=0
-		fi
-		project_ok=$((project_ok+1))
-	elif [ "$opt" == "Email" ]; then #이메일 위치
-		email_p=$(awk -F= '{print $2}' <<< $SO)
-		if [ "$email_p" == "" ]; then
-			email_p=0
-		fi
-		email_ok=$((email_ok+1))
-	elif [ "$opt" == "Description" ]; then #이메일 위치
-		description_p=$(awk -F= '{print $2}' <<< $SO)
-		if [ "$description_p" == "" ]; then
-			description_p=0
-		fi
-		description_ok=$((description_ok+1))
-	elif [ "$opt" == "ProjectStr" ]; then #프로젝트 문자열 입력용
-		project=$(awk -F= '{print $2}' <<< $SO)
-		project_ok=$((project_ok+1))
-	elif [ "$opt" == "NameAdd" ]; then #이름 앞에 추가할 것
-		name_s=$(awk -F= '{print $2}' <<< $SO)
-	elif [ "$opt" == "Work" ]; then #작업 실행
-		tests=1
-	elif [ "$opt" == "Delete" ]; then #계정 삭제
-		deletes=1
-	else
-		#프로그램이 읽을 수 없는 명령어가 들어올 경우 안내문 출력후 프로그램 종료
-		echo "------------------------------------------------------------------------------"
-		echo "실행할 수 없는 명령어가 있습니다."
-		echo "실행할 수 없는 명령어 : $SO"
-		echo "------------------------------------------------------------------------------"
-		exit 0
-	fi
+# Function to process and assign field numbers based on received command options
+SetOption() {
+    opt="${SO%%=*}"
+    value="${SO#*=}"
+    if [ "$opt" == "$value" ]; then
+        value=""
+    fi
+
+    case "$opt" in
+        "Name") # Position of Name
+            name_p="$value"
+            [ -z "$name_p" ] && name_p=0
+            name_ok=$((name_ok + 1))
+            ;;
+        "Password") # Position of Password
+            password_p="$value"
+            [ -z "$password_p" ] && password_p=0
+            password_ok=$((password_ok + 1))
+            ;;
+        "Count") # Position of Count
+            count_p="$value"
+            [ -z "$count_p" ] && count_p=0
+            count_ok=$((count_ok + 1))
+            ;;
+        "Project") # Position of Project
+            project_p="$value"
+            [ -z "$project_p" ] && project_p=0
+            project_ok=$((project_ok + 1))
+            ;;
+        "ProjectStr") # Project name as string
+            project="$value"
+            project_ok=$((project_ok + 1))
+            ;;
+        "Email") # Position of Email
+            email_p="$value"
+            [ -z "$email_p" ] && email_p=0
+            email_ok=$((email_ok + 1))
+            ;;
+        "Description") # Position of Description
+            description_p="$value"
+            [ -z "$description_p" ] && description_p=0
+            description_ok=$((description_ok + 1))
+            ;;
+        "NameAdd") # Prefix to add to account name
+            name_prefix="$value"
+            ;;
+        "Work") # Execute commands
+            execute_commands=1
+            ;;
+        "Delete") # Delete accounts
+            delete_accounts=1
+            ;;
+        *)
+            # If an unrecognized command is received, display an error and exit
+            echo "------------------------------------------------------------------------------"
+            echo "Unrecognized command: $SO"
+            echo "------------------------------------------------------------------------------"
+            exit 1
+            ;;
+    esac
 }
 
-#받은 필드번호에 위치한 문자열을 반환
-ReadPoint()
-{
-	if [ $RP -eq 0 ]; then #모든 포인트가 0으로 초기화되어있으므로 포인트가 0이면 받은 인자가 없다는 뜻
-		RP=""
-	else #0이 아니라면 그 필드를 읽어 문자열을 반환
-		pri="{print $da$RP}"
-		RP=$(awk -F, "$pri" <<< $line)
-	fi
-}
+# Main
+# Process command-line options starting from the second argument
+if [ $# -lt 1 ]; then
+    echo "Error: CSV file name is required."
+    exit 1
+fi
+csv_file="$1"
+shift # Skip the first argument (CSV file name)
 
-#csv파일에서 정보를 읽을 수 없을 경우의 안내문
-Error1()
-{
-	echo "----------------------------------------------------------------------"
-	echo "$str 에서 읽은 정보중에 읽을 수 없는 정보가 있습니다."
-	echo "읽은 정보 개수 $count_c"
-	echo "name     = $name_c"
-	echo "password = $password_c"
-	echo "project  = $project_c"
-	echo "----------------------------------------------------------------------"
-}
+for SO in "$@"; do
+    SetOption
+done
 
-#Main
-#$2~$9에 적힌 명령어를 읽어 필드번호를 할당
-if [ "$2" != "" ]; then
-	SO=$2
-	SetOption
-fi
-if [ "$3" != "" ]; then
-	SO=$3
-	SetOption
-fi
-if [ "$4" != "" ]; then
-	SO=$4
-	SetOption
-fi
-if [ "$5" != "" ]; then
-	SO=$5
-	SetOption
-fi
-if [ "$6" != "" ]; then
-	SO=$6
-	SetOption
-fi
-if [ "$7" != "" ]; then
-	SO=$7
-	SetOption
-fi
-if [ "$8" != "" ]; then
-	SO=$8
-	SetOption
-fi
-if [ "$9" != "" ]; then
-	SO=$9
-	SetOption
-fi
-if [ "$9" != "" ]; then
-	SO=${10}
-	SetOption
+# Verify that required options have been input correctly
+if [ "$name_ok" -ne 1 ] || [ "$password_ok" -ne 1 ] || [ "$count_ok" -ne 1 ]; then
+    echo "--------------------[Incorrect command input.]-----------------------"
+    echo "Options 'Name', 'Password', and 'Count' are required."
+    echo "Options may have been duplicated or missing."
+    echo "-----------------------------------------------------------------------------"
+    echo "File name: $csv_file"
+    echo "Number of times options were input:"
+    echo "Name       = $name_ok"
+    echo "Password   = $password_ok"
+    echo "Count      = $count_ok"
+    echo "Project    = $project_ok"
+    echo "-----------------------------------------------------------------------------"
+    exit 1
 fi
 
-#명령어 입력이 정상이였는지 판별
-if [ "$name_ok" != "1" -o "$password_ok" != "1" -o "$count_ok" != "1" -o $project_ok -ge 2 ]; then
-		echo "--------------------[명령어 입력이 올바르지 않습니다.]-----------------------"
-		echo "옵션은 -n(name) -p(password) -c(count)가 필수적으로 들어갑니다."
-		echo "옵션이 중복되었거나 파일입력이 잘못되었을 수도 있습니다."
-		echo "-----------------------------------------------------------------------------"
-		echo "파일 이름: $1"
-		echo "입력된 명령어 횟수"
-		echo "name     = $name_ok"
-		echo "password = $password_ok"
-		echo "count    = $count_ok"
-		echo "project  = $project_ok"
-		echo "-----------------------------------------------------------------------------"
-		exit 0
+# Ensure that project option is specified only once
+if [ "$project_ok" -eq 0 ]; then
+    echo "--------------------[Incorrect command input.]-----------------------"
+    echo "Option 'Project' or 'ProjectStr' is required."
+    echo "-----------------------------------------------------------------------------"
+    exit 1
+elif [ "$project_ok" -ge 2 ]; then
+    echo "--------------------[Incorrect command input.]-----------------------"
+    echo "Project option is duplicated."
+    echo "-----------------------------------------------------------------------------"
+    exit 1
 fi
 
-#파일 정보가 올바른지 확인, 읽는데 문제가 있다면 안내문 출력후 프로그램 종료
+# Verify that the CSV file exists
+if [ ! -f "$csv_file" ]; then
+    echo "Error: CSV file '$csv_file' not found."
+    exit 1
+fi
+
+# Verify that the file information is correct; if there is a problem, display an error message and exit
 count_c=0
 name_c=0
 password_c=0
 project_c=0
 count=1
-while read line # 파일을 한번 훑어봄
-do
-	RP=$count_p
-	ReadPoint
-	count_r=$RP
-	if [ "$count_r" == "$count" ]; then
-		RP=$name_p
-		ReadPoint
-		name=$RP
-		if [ "$name" != "" ]; then
-			name_c=$((name_c+1))
-		fi
-		RP=$password_p
-		ReadPoint
-		password=$RP
-		if [ "$password" != "" ]; then
-			password_c=$((password_c+1))
-		fi
-		if [ "$project_p" != "0" ]; then
-			RP=$project_p
-			ReadPoint
-			project=$RP
-		fi
-		if [ "$project" != "" ]; then
-			project_c=$((project_c+1))
-		fi
-		count=$((count+1))
-		count_c=$((count_c+1))
-	fi
-done < $1
-#읽지 못하는 정보를 발견하면 안내문 출력후 프로그램 종료
-if [ "$count_c" != "$name_c" -o "$count_c" != "$password_c" -o "$count_c" != "$project_c" ]; then
-	if [ "$project_ok" != "0" -a "$count_c" != "$project_c" ]; then
-		str=$1
-		Error1
-		exit 0
-	fi
-	if [ "$count_c" != "$name_c" -o "$count_c" != "$password_c" ]; then
-		str=$1
-		Error1
-		exit 0
-	fi
+while IFS=',' read -r -a fields; do
+    count_r="${fields[$((count_p - 1))]}"
+    if [ "$count_r" == "$count" ]; then
+        name="${fields[$((name_p - 1))]}"
+        [ -n "$name" ] && name_c=$((name_c + 1))
+        password="${fields[$((password_p - 1))]}"
+        [ -n "$password" ] && password_c=$((password_c + 1))
+        if [ "$project_p" -ne 0 ]; then
+            project="${fields[$((project_p - 1))]}"
+            [ -n "$project" ] && project_c=$((project_c + 1))
+        fi
+        count=$((count + 1))
+        count_c=$((count_c + 1))
+    fi
+done < "$csv_file"
+
+# If unreadable information is found, display an error message and exit
+if [ "$count_c" -ne "$name_c" ] || [ "$count_c" -ne "$password_c" ] || ([ "$project_p" -ne 0 ] && [ "$count_c" -ne "$project_c" ]); then
+    echo "----------------------------------------------------------------------"
+    echo "There is information in '$csv_file' that cannot be read."
+    echo "Number of entries read: $count_c"
+    echo "Name entries     = $name_c"
+    echo "Password entries = $password_c"
+    echo "Project entries  = $project_c"
+    echo "----------------------------------------------------------------------"
+    exit 1
 fi
 
-#파일을 읽어 계정 생성
+# Read the file and create or delete accounts
 count=1
-while read line
-do
-	RP=$count_p
-	ReadPoint
-	count_r=$RP
-	if [ "$count_r" == "$count" ]; then
-		RP=$name_p
-		ReadPoint
-		name=$RP
-		RP=$password_p
-		ReadPoint
-		password=$RP
-		if [ "$project_p" != "0" ]; then
-			RP=$project_p
-			ReadPoint
-			project=$RP
-		fi
-		if [ "$email_p" != "0" ]; then
-			RP=$email_p
-			ReadPoint
-			email=$RP
-		fi
-		if [ "$description_p" != "0" ]; then
-			RP=$description_p
-			ReadPoint
-			description=$RP
-		fi
-		#계정생성부분
-		if [ "$project" == "" ]; then
-			echo "프로그램이 수정되어 프로젝트를 반드시 입력하셔야 합니다."
-			break
-		else
-			if [ $tests -eq 0 ]; then # tests가 0이면 명령어 출력, tests가 1이면 명령어 실행
-				if [ $deletes -eq 0 ]; then # deletes가 0이면 계정 생성, 1이면 계정 삭제
-					if [ $email_ok -eq 1 ]; then # email 생성 실행
-						echo "openstack user create --domain default --project $project --email $email --password $password $name_s$name"
-					else
-						echo "openstack user create --domain default --project $project --password $password $name_s$name"
-					fi
-					echo "openstack role add --project $project --user $name_s$name --user-domain default member"
-				else
-					echo "openstack user delete --domain default $name_s$name"
-				fi
-			else
-				if [ $deletes -eq 0 ]; then
-					if [ $email_ok -eq 1 ]; then # email 생성 실행
-						openstack user create --domain default --project $project --email $email --description $description --password $password $name_s$name
-					else
-						openstack user create --domain default --project $project --password $password $name_s$name
-					fi
-					openstack role add --project $project --user $name_s$name --user-domain default member
-				else
-					openstack user delete --domain default $name_s$name
-				fi
-			fi
-		fi
-		count=$((count+1))
-	fi
-done < $1
+created_count=0
+while IFS=',' read -r -a fields; do
+    count_r="${fields[$((count_p - 1))]}"
+    if [ "$count_r" == "$count" ]; then
+        name="${fields[$((name_p - 1))]}"
+        password="${fields[$((password_p - 1))]}"
+        if [ "$project_p" -ne 0 ]; then
+            project="${fields[$((project_p - 1))]}"
+        fi
+        if [ "$email_p" -ne 0 ]; then
+            email="${fields[$((email_p - 1))]}"
+        fi
+        if [ "$description_p" -ne 0 ]; then
+            description="${fields[$((description_p - 1))]}"
+        fi
+        # Account creation or deletion
+        if [ -z "$project" ]; then
+            echo "Error: Project must be specified for each account."
+            break
+        else
+            full_name="$name_prefix$name"
+            if [ $execute_commands -eq 0 ]; then
+                # Display commands
+                if [ $delete_accounts -eq 0 ]; then
+                    # Create account commands
+                    if [ $email_ok -eq 1 ]; then
+                        echo "openstack user create --domain default --project '$project' --email '$email' --password '$password' '$full_name'"
+                    else
+                        echo "openstack user create --domain default --project '$project' --password '$password' '$full_name'"
+                    fi
+                    echo "openstack role add --project '$project' --user '$full_name' --user-domain default member"
+                else
+                    # Delete account command
+                    echo "openstack user delete --domain default '$full_name'"
+                fi
+            else
+                # Execute commands
+                if [ $delete_accounts -eq 0 ]; then
+                    # Create account
+                    if [ $email_ok -eq 1 ]; then
+                        openstack user create --domain default --project "$project" --email "$email" --description "$description" --password "$password" "$full_name"
+                    else
+                        openstack user create --domain default --project "$project" --description "$description" --password "$password" "$full_name"
+                    fi
+                    openstack role add --project "$project" --user "$full_name" --user-domain default member
+                else
+                    # Delete account
+                    openstack user delete --domain default "$full_name"
+                fi
+            fi
+            created_count=$((created_count + 1))
+        fi
+        count=$((count + 1))
+    fi
+done < "$csv_file"
 
-echo "생성 계정 수 $((count-1))"
+echo "Number of accounts processed: $created_count"
 
 exit 0
